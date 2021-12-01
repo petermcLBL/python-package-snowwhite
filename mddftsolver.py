@@ -4,6 +4,12 @@ import numpy as np
 import ctypes
 import sys
 
+try:
+    import cupy as cp
+    cupy_found = True
+except ModuleNotFoundError:
+    cupy_found = False
+
 
 class MddftProblem(SWProblem):
     """Define Multi-dimention DFT problem."""
@@ -57,15 +63,28 @@ class MddftSolver(SWSolver):
         """Call the SPIRAL generated main function -- {_namebase}."""
         funcname = self._namebase
         gf = getattr(self._SharedLibAccess, funcname)
-
-        return gf( dest.ctypes.data_as(ctypes.c_void_p),
-                   source.ctypes.data_as(ctypes.c_void_p) )
+        if cupy_found and type(source) == cp.ndarray and type(dest) == cp.ndarray:
+            # source and dest are of type CuPy ndarray.
+            source_ctypes = ctypes.cast(source.data.ptr,
+                                        ctypes.POINTER(ctypes.c_void_p))
+            dest_ctypes = ctypes.cast(dest.data.ptr,
+                                      ctypes.POINTER(ctypes.c_void_p))
+            return gf( dest_ctypes,
+                       source_ctypes )
+        else:
+            # source or dest is of type NumPy ndarray.  Check that both are?
+            return gf( dest.ctypes.data_as(ctypes.c_void_p),
+                       source.ctypes.data_as(ctypes.c_void_p) )
 
     def solve(self, src):
         """Call SPIRAL-generated function."""
 
         nt = tuple(self._problem.dimensions())
-        dst = np.zeros(nt, complex)
+        # Set dst to CuPy ndarray if CuPy is defined and src is CuPy ndarray.
+        if cupy_found and type(src) == cp.ndarray:
+            dst = cp.zeros(nt, complex)
+        else:
+            dst = np.zeros(nt, complex)
         self._func(dst, src)
         if self._problem.direction() == SW_INVERSE:
             dst = dst / np.size(dst)
