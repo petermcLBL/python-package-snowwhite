@@ -72,16 +72,7 @@ class StepPhaseSolver(SWSolver):
         if type(dst) == type(None):
             n = self._problem.dimN()  
             dst = xp.zeros((n, n, n), src.dtype)
-        #slice amplitudes if it's a cube
-        shape = amplitudes.shape
-        if shape[0] == shape[2]:
-            N = shape[0]
-            Nx = (N // 2) + 1
-            _amps = xp.ascontiguousarray(amplitudes[:, :, :Nx])
-        else:
-            _amps = amplitudes
-
-        self._func(dst, src, _amps)
+        self._func(dst, src, amplitudes)
         return dst
                     
     def _func(self, dst, src, amplitudes):
