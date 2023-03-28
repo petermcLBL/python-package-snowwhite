@@ -1,17 +1,17 @@
 #! python
 
 """
-usage: run-mddft.py sz bat [ F|I [ d|s [ GPU|CPU ]]]
-  sz is N or N1,N2,.. all N >= 2, single N implies 3D cube
+usage: run-mdprdft.py sz bat [ F|I [ d|s [ GPU|CPU ]]]
+  sz is N or N1,N2,N3, all N >= 2     (dimensions of full real array)
   F  = Forward, I = Inverse           (default: Forward)
   d  = double, s = single precision   (default: double precision)
                                     
   (GPU is default target unless none exists or no CuPy)
   
-Multi-dimensional complex FFT
+Three-dimensional real-to-complex FFT (inverse is complex-to-real)
 """
 
-from snowwhite.mddftsolver import *
+from snowwhite.mdprdftsolver import *
 import numpy as np
 try:
     import cupy as cp
@@ -27,13 +27,9 @@ def usage():
 try:
   nnn = sys.argv[1].split(',')
   n1 = int(nnn[0])
-  if len(nnn) < 2:
-    # default to 3D cube
-    dims = [n1,n1,n1]
-  else:
-    dims = [n1]
-    for i in range(1, len(nnn)):
-      dims.append(int(nnn[i]))
+  n2 = (lambda:n1, lambda:int(nnn[1]))[len(nnn) > 1]()
+  n3 = (lambda:n2, lambda:int(nnn[2]))[len(nnn) > 2]()
+  dims = [n1,n2,n3]
 except:
   usage()
   
@@ -48,10 +44,12 @@ if len(sys.argv) > 2:
  
 # base C type, 'float' or 'double'
 c_type = 'double'
+ftype = np.double
 cxtype = np.cdouble       
 if len(sys.argv) > 3:
     if sys.argv[3] == "s":
         c_type = 'float'
+        ftype = np.single
         cxtype = np.csingle
         
 if len ( sys.argv ) > 4:
@@ -66,18 +64,29 @@ if plat_arg == 'GPU' and (cp != None):
 else:
     platform = SW_CPU
     forGPU = False 
-    xp = np       
+    xp = np
 
 opts = { SW_OPT_REALCTYPE : c_type, SW_OPT_PLATFORM : platform }
    
-p1 = MddftProblem(dims, k)
-s1 = MddftSolver(p1, opts)
+p1 = MdprdftProblem(dims, k)
+s1 = MdprdftSolver(p1, opts)
 
-src = np.ones(dims, cxtype)
-for  x in range (np.size(src)):
-    vr = np.random.random()
-    vi = np.random.random()
-    src.itemset(x,vr + vi * 1j)
+if k == SW_FORWARD:
+    # build full-size array of real
+    src = np.ones(dims, ftype)
+    for  k in range (np.size(src)):
+        vr = np.random.random()
+        src.itemset(k,vr)
+else:
+    # build half-size array of complex
+    dims2 = dims.copy()
+    z = dims2.pop()
+    dims2.append(z // 2 + 1)
+    src = np.ones(dims2, cxtype)
+    for  k in range (np.size(src)):
+        vr = np.random.random()
+        vi = np.random.random()
+        src.itemset(k,vr + vi * 1j)
 
 xp = np
 if forGPU:    
