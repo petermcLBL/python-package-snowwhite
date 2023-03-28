@@ -1,3 +1,9 @@
+"""
+SnowWhite Mdrconvsolver Module
+==============================
+
+Cyclic 3D Real Cyclic Convolution
+"""
 
 from snowwhite import *
 from snowwhite.swsolver import *
@@ -10,25 +16,25 @@ try:
 except ModuleNotFoundError:
     cp = None
 
-class MdrfsconvProblem(SWProblem):
-    """Define Mdrfsconv problem."""
+class MdrconvProblem(SWProblem):
+    """define cyclic convolution problem."""
 
     def __init__(self, n):
-        """Setup problem specifics for Mdrfsconv solver.
+        """Setup problem specifics for Mdrconv solver.
         
         Arguments:
         n      -- dimension of input/output cube
         """
-        super(MdrfsconvProblem, self).__init__([n,n,n])
+        super(MdrconvProblem, self).__init__([n,n,n])
 
     def dimN(self):
         return self.dimensions()[0]
 
 
-class MdrfsconvSolver(SWSolver):
-    def __init__(self, problem: MdrfsconvProblem, opts = {}):
-        if not isinstance(problem, MdrfsconvProblem):
-            raise TypeError("problem must be an MdrfsconvProblem")
+class MdrconvSolver(SWSolver):
+    def __init__(self, problem: MdrconvProblem, opts = {}):
+        if not isinstance(problem, MdrconvProblem):
+            raise TypeError("problem must be an MdrconvProblem")
         
         typ = 'd'
         self._ftype = np.double
@@ -40,11 +46,11 @@ class MdrfsconvSolver(SWSolver):
         
         n = str(problem.dimN())
         ns = 'x'.join([str(n) for n in problem.dimensions()])
-        namebase = typ + 'Mdrfsconv_' + ns
+        namebase = typ + 'Mdrconv_' + ns
             
         opts[SW_OPT_METADATA] = True
         
-        super(MdrfsconvSolver, self).__init__(problem, namebase, opts)
+        super(MdrconvSolver, self).__init__(problem, namebase, opts)
 
         
     def _trace(self):
@@ -59,18 +65,12 @@ class MdrfsconvSolver(SWSolver):
             
     def runDef(self, src, sym):
         """Solve using internal Python definition."""
-
-        # Mdrfsconv problem dimensions
-        N = self._problem.dimN() * 2
-        Ns = self._problem.dimN()
-        Nd = self._problem.dimN()
         
-        # Mdrfsconv operations
-        In = self.zeroEmbedBox(src, ((Ns,0),)) # zero pad input data 
-        FFT = self.rfftn(In)            # execute real forward dft on rank 3 data      
-        P = self.pointwise(FFT, sym) # execute pointwise operation
-        IFFT = self.irfftn(P, shape=In.shape)  # execute real backward dft on rank 3 data
-        return self.extract(IFFT, N, Nd)   # extract data from corner cube
+        srcF = self.rfftn(src)
+        P = self.pointwise(srcF, sym)
+        out = self.irfftn(P, shape=src.shape)
+        
+        return out
     
     def solve(self, src, sym, dst=None):
         """Call SPIRAL-generated code"""
@@ -88,7 +88,7 @@ class MdrfsconvSolver(SWSolver):
         if type(dst) == type(None):
             dst = xp.zeros((N,N,N), src.dtype)
         self._func(dst, src, sym)
-        xp.divide(dst, (2*N)**3, out=dst)
+        xp.divide(dst, N**3, out=dst)
         return dst
  
     def _func(self, dst, src, sym):
@@ -169,17 +169,17 @@ class MdrfsconvSolver(SWSolver):
         
         testSrc = xp.random.rand(n,n,n).astype(self._ftype)
         
-        symIn = xp.random.rand(n*2,n*2,n*2).astype(self._ftype)
+        symIn = xp.random.rand(n,n,n).astype(self._ftype)
         testSym = xp.fft.rfftn(symIn)
         
         #NumPy returns Fortran ordering from FFTs, and always double complex
         if xp == np:
-            testSym = np.asanyarray(testSym, dtype=self._cxtype, order='C')        
+            testSym = np.asanyarray(testSym, dtype=self._cxtype, order='C')
         
         return (testSrc, testSym)
     
     def _setFunctionMetadata(self, obj):
-        obj[SW_KEY_TRANSFORMTYPE] = SW_TRANSFORM_MDRFSCONV
+        obj[SW_KEY_TRANSFORMTYPE] = SW_TRANSFORM_MDRCONV
      
 
     
